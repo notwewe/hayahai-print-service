@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "HayahAI Print Service",
+  "version": "0.1.0",
+  "identifier": "com.hayahai.printservice",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "HayahAI Print Service",
+        "width": 620,
+        "height": 520,
+        "resizable": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "dmg"],
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["hayahai-print"]
+      }
+    },
+    "updater": {
+      "endpoints": [
+        "https://github.com/notwewe/hayahai-print-service/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFFNzlEQjE4QTI5MzVFNEIKUldSTFhwT2lHTnQ1cmhWRitHaE5NMGczeWI1NUFlNDZ4elNPOXExZ2pCNTFVTjR2YTZCUmVnck0K"
+    }
+  }
+}
