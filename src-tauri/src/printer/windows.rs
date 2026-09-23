@@ -4,8 +4,8 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use windows_sys::Win32::Graphics::Printing::{
     ClosePrinter, DOC_INFO_1W, EndDocPrinter, EndPagePrinter, EnumPrintersW, OpenPrinterW,
-    PRINTER_ENUM_CONNECTIONS, PRINTER_ENUM_LOCAL, PRINTER_INFO_2W, StartDocPrinterW,
-    StartPagePrinter, WritePrinter,
+    PRINTER_ENUM_CONNECTIONS, PRINTER_ENUM_LOCAL, PRINTER_HANDLE, PRINTER_INFO_2W,
+    StartDocPrinterW, StartPagePrinter, WritePrinter,
 };
 
 use crate::{AgentError, model::PrinterInfo};
@@ -91,9 +91,9 @@ pub async fn spool(queue: &str, job_id: &str, bytes: &[u8]) -> SpoolOutcome {
     let job_id = job_id.to_owned();
     let bytes = bytes.to_vec();
     tauri::async_runtime::spawn_blocking(move || unsafe {
-        let mut printer = 0;
-        let mut queue_wide = wide(&queue);
-        if OpenPrinterW(queue_wide.as_mut_ptr(), &mut printer, ptr::null()) == 0 {
+        let mut printer = PRINTER_HANDLE(ptr::null_mut());
+        let queue_wide = wide(&queue);
+        if OpenPrinterW(queue_wide.as_ptr(), &mut printer, ptr::null()) == 0 {
             return SpoolOutcome::Failed("Windows could not open the printer queue".into());
         }
         let title = wide(&format!("HayahAI-{job_id}"));
@@ -103,7 +103,7 @@ pub async fn spool(queue: &str, job_id: &str, bytes: &[u8]) -> SpoolOutcome {
             pOutputFile: ptr::null_mut(),
             pDatatype: raw.as_ptr() as *mut _,
         };
-        if StartDocPrinterW(printer, 1, &info as *const _ as *const u8) == 0 {
+        if StartDocPrinterW(printer, 1, &info) == 0 {
             ClosePrinter(printer);
             return SpoolOutcome::Failed("Windows rejected the raw print job".into());
         }
