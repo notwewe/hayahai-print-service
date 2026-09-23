@@ -41,7 +41,7 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: HayahAI Print Service ${{ github.ref_name }}
           releaseBody: Install once per cashier workstation, approve the unsigned first install, then pair it from TMS Printing Presets.
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
