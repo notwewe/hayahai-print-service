@@ -12,6 +12,15 @@ use crate::{AgentError, model::PrinterInfo};
 
 use super::SpoolOutcome;
 
+const UNAVAILABLE_STATUS: u32 = 0x0000_0002
+    | 0x0000_0008
+    | 0x0000_0010
+    | 0x0000_0040
+    | 0x0000_0080
+    | 0x0000_0800
+    | 0x0000_1000
+    | 0x0010_0000;
+
 fn wide(value: &str) -> Vec<u16> {
     value.encode_utf16().chain(Some(0)).collect()
 }
@@ -77,7 +86,7 @@ pub async fn discover() -> Result<Vec<PrinterInfo>, AgentError> {
                     transport: "os-queue".into(),
                     capabilities: json!({ "raw": true, "provider": "winspool", "port": port }),
                     environment_hash: fingerprint,
-                    available: true,
+                    available: row.Status & UNAVAILABLE_STATUS == 0,
                 }
             })
             .collect())

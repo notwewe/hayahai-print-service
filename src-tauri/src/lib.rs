@@ -90,10 +90,11 @@ async fn pair(
     api::validate_api_url(&api_url).map_err(|error| error.to_string())?;
     // A fresh key makes an explicit re-pair independent of a revoked or stale identity.
     let key = storage::new_signing_key();
+    let public_key = STANDARD.encode(key.verifying_key().to_bytes());
     let request = EnrollRequest {
         enrollment_id,
         secret,
-        public_key: STANDARD.encode(key.verifying_key().to_bytes()),
+        public_key: public_key.clone(),
         hostname: hostname::get()
             .map_err(AgentError::Io)
             .map_err(|error| error.to_string())?
@@ -118,6 +119,7 @@ async fn pair(
         agent_id: response.id.clone(),
         tenant_id: response.tenant_id,
         protocol: response.protocol,
+        public_key,
         counter: 0,
     };
     // Follow the same lock order as signed requests so credentials change atomically in memory.
@@ -235,9 +237,12 @@ pub fn run() {
             use tauri_plugin_deep_link::DeepLinkExt;
 
             let handle = app.handle().clone();
-            let config = storage::load_config(&handle)?;
-            let paired = config.is_some();
             let key = storage::signing_key()?;
+            let expected_public_key = STANDARD.encode(key.verifying_key().to_bytes());
+            let config = storage::load_config(&handle)?.filter(|config| {
+                config.protocol == PROTOCOL && config.public_key == expected_public_key
+            });
+            let paired = config.is_some();
             let runtime = AgentRuntime::new(config, key);
             let api = ApiClient::new(
                 handle.clone(),

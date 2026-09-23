@@ -11,6 +11,10 @@ use super::SpoolOutcome;
 pub async fn discover() -> Result<Vec<PrinterInfo>, AgentError> {
     let output = Command::new("/usr/bin/lpstat").arg("-p").output().await?;
     if !output.status.success() {
+        let error = String::from_utf8_lossy(&output.stderr);
+        if error.to_ascii_lowercase().contains("no destinations added") {
+            return Ok(Vec::new());
+        }
         return Err(AgentError::Printer("CUPS printer discovery failed".into()));
     }
     let text = String::from_utf8_lossy(&output.stdout);

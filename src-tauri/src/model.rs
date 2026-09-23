@@ -9,6 +9,8 @@ pub struct AgentConfig {
     pub agent_id: String,
     pub tenant_id: i32,
     pub protocol: String,
+    #[serde(default)]
+    pub public_key: String,
     pub counter: u64,
 }
 
