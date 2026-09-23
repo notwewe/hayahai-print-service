@@ -2,7 +2,7 @@
   "name": "hayahai-print-service",
   "private": true,
   "description": "HayahAI background service for managed ESC/POS receipt printing",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
