@@ -100,7 +100,7 @@ pub async fn spool(queue: &str, job_id: &str, bytes: &[u8]) -> SpoolOutcome {
     let job_id = job_id.to_owned();
     let bytes = bytes.to_vec();
     tauri::async_runtime::spawn_blocking(move || unsafe {
-        let mut printer = PRINTER_HANDLE(ptr::null_mut());
+        let mut printer = PRINTER_HANDLE::default();
         let queue_wide = wide(&queue);
         if OpenPrinterW(queue_wide.as_ptr(), &mut printer, ptr::null()) == 0 {
             return SpoolOutcome::Failed("Windows could not open the printer queue".into());
