@@ -52,10 +52,10 @@ pub async fn discover() -> Result<Vec<PrinterInfo>, AgentError> {
     Ok(printers)
 }
 
-fn driver_options(options: &ClaimedPrintOptions) -> Result<[String; 3], String> {
+fn driver_options(options: &ClaimedPrintOptions) -> Result<Vec<String>, String> {
     let page_size = match options.paper_width_mm {
-        58 => "PageSize=RP58x2000",
-        80 => "PageSize=RP80x2000",
+        58 => "RP58x2000",
+        80 => "RP80x2000",
         width => return Err(format!("Unsupported receipt paper width: {width}mm")),
     };
     let cut = match options.cut.as_str() {
@@ -63,8 +63,12 @@ fn driver_options(options: &ClaimedPrintOptions) -> Result<[String; 3], String> 
         "partial" | "full" => "TmxPaperCut=CutPerPage",
         value => return Err(format!("Unsupported receipt cutter mode: {value}")),
     };
-    Ok([
-        page_size.into(),
+    Ok(vec![
+        format!("media={page_size}"),
+        format!("PageSize={page_size}"),
+        format!("Resolution={}x{}dpi", options.dpi, options.dpi),
+        "sides=one-sided".into(),
+        "fit-to-page".into(),
         "TmxPaperReduction=Bottom".into(),
         cut.into(),
     ])
@@ -325,10 +329,15 @@ mod tests {
         assert_eq!(
             driver_options(&ClaimedPrintOptions {
                 paper_width_mm: 80,
+                dpi: 203,
                 cut: "partial".into(),
             }),
-            Ok([
+            Ok(vec![
+                "media=RP80x2000".into(),
                 "PageSize=RP80x2000".into(),
+                "Resolution=203x203dpi".into(),
+                "sides=one-sided".into(),
+                "fit-to-page".into(),
                 "TmxPaperReduction=Bottom".into(),
                 "TmxPaperCut=CutPerPage".into(),
             ])
@@ -336,10 +345,15 @@ mod tests {
         assert_eq!(
             driver_options(&ClaimedPrintOptions {
                 paper_width_mm: 58,
+                dpi: 300,
                 cut: "none".into(),
             }),
-            Ok([
+            Ok(vec![
+                "media=RP58x2000".into(),
                 "PageSize=RP58x2000".into(),
+                "Resolution=300x300dpi".into(),
+                "sides=one-sided".into(),
+                "fit-to-page".into(),
                 "TmxPaperReduction=Bottom".into(),
                 "TmxPaperCut=NoCut".into(),
             ])

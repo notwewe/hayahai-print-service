@@ -59,6 +59,7 @@ pub struct ClaimedPrinter {
 #[allow(dead_code)] // Windows receives these signed options but submits pre-rendered ESC/POS bytes.
 pub struct ClaimedPrintOptions {
     pub paper_width_mm: u16,
+    pub dpi: u16,
     pub cut: String,
 }
 
