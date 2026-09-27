@@ -8,7 +8,10 @@ use windows_sys::Win32::Graphics::Printing::{
     StartDocPrinterW, StartPagePrinter, WritePrinter,
 };
 
-use crate::{AgentError, model::PrinterInfo};
+use crate::{
+    AgentError,
+    model::{ClaimedPrintOptions, PrinterInfo},
+};
 
 use super::SpoolOutcome;
 
@@ -95,7 +98,12 @@ pub async fn discover() -> Result<Vec<PrinterInfo>, AgentError> {
     .map_err(|error| AgentError::Printer(error.to_string()))?
 }
 
-pub async fn spool(queue: &str, job_id: &str, bytes: &[u8]) -> SpoolOutcome {
+pub async fn spool(
+    queue: &str,
+    job_id: &str,
+    bytes: &[u8],
+    _options: Option<&ClaimedPrintOptions>,
+) -> SpoolOutcome {
     let queue = queue.to_owned();
     let job_id = job_id.to_owned();
     let bytes = bytes.to_vec();

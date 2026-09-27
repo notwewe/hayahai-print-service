@@ -6,7 +6,10 @@ use sha2::{Digest, Sha256};
 use tokio::time::{Instant, sleep};
 use tokio::{io::AsyncWriteExt, process::Command};
 
-use crate::{AgentError, model::PrinterInfo};
+use crate::{
+    AgentError,
+    model::{ClaimedPrintOptions, PrinterInfo},
+};
 
 use super::SpoolOutcome;
 
@@ -41,7 +44,7 @@ pub async fn discover() -> Result<Vec<PrinterInfo>, AgentError> {
                 .next()
                 .map(|value| value.chars().take(255).collect()),
             transport: "os-queue".into(),
-            capabilities: json!({ "raw": true, "provider": "cups" }),
+            capabilities: json!({ "pdf": true, "provider": "cups" }),
             environment_hash: fingerprint,
             available: !line.contains("disabled"),
         });
@@ -49,9 +52,50 @@ pub async fn discover() -> Result<Vec<PrinterInfo>, AgentError> {
     Ok(printers)
 }
 
-pub async fn spool(queue: &str, job_id: &str, bytes: &[u8]) -> SpoolOutcome {
-    let mut child = match Command::new("/usr/bin/lp")
-        .args(["-d", queue, "-o", "raw", "-t", &format!("HayahAI-{job_id}")])
+fn driver_options(options: &ClaimedPrintOptions) -> Result<[String; 3], String> {
+    let page_size = match options.paper_width_mm {
+        58 => "PageSize=RP58x2000",
+        80 => "PageSize=RP80x2000",
+        width => return Err(format!("Unsupported receipt paper width: {width}mm")),
+    };
+    let cut = match options.cut.as_str() {
+        "none" => "TmxPaperCut=NoCut",
+        "partial" | "full" => "TmxPaperCut=CutPerPage",
+        value => return Err(format!("Unsupported receipt cutter mode: {value}")),
+    };
+    Ok([
+        page_size.into(),
+        "TmxPaperReduction=Bottom".into(),
+        cut.into(),
+    ])
+}
+
+pub async fn spool(
+    queue: &str,
+    job_id: &str,
+    bytes: &[u8],
+    options: Option<&ClaimedPrintOptions>,
+) -> SpoolOutcome {
+    let Some(options) = options else {
+        return SpoolOutcome::Failed("The macOS printer settings are missing".into());
+    };
+    let options = match driver_options(options) {
+        Ok(options) => options,
+        Err(error) => return SpoolOutcome::Failed(error),
+    };
+    let mut command = Command::new("/usr/bin/lp");
+    command.args([
+        "-d",
+        queue,
+        "-t",
+        &format!("HayahAI-{job_id}"),
+        "-o",
+        "document-format=application/pdf",
+    ]);
+    for option in &options {
+        command.args(["-o", option]);
+    }
+    let mut child = match command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -274,5 +318,31 @@ mod tests {
             "job-state (enum) = processing\njob-state-reasons (keyword) = job-printing\njob-printer-state-message (textWithoutLanguage) = Sending data to printer.\n",
         );
         assert!(!terminal_failure(&status));
+    }
+
+    #[test]
+    fn maps_managed_preset_to_epson_driver_options() {
+        assert_eq!(
+            driver_options(&ClaimedPrintOptions {
+                paper_width_mm: 80,
+                cut: "partial".into(),
+            }),
+            Ok([
+                "PageSize=RP80x2000".into(),
+                "TmxPaperReduction=Bottom".into(),
+                "TmxPaperCut=CutPerPage".into(),
+            ])
+        );
+        assert_eq!(
+            driver_options(&ClaimedPrintOptions {
+                paper_width_mm: 58,
+                cut: "none".into(),
+            }),
+            Ok([
+                "PageSize=RP58x2000".into(),
+                "TmxPaperReduction=Bottom".into(),
+                "TmxPaperCut=NoCut".into(),
+            ])
+        );
     }
 }

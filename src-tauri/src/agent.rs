@@ -14,7 +14,7 @@ use tokio::sync::{Mutex, RwLock};
 
 use crate::{
     api::ApiClient,
-    model::{AgentConfig, AgentStatus},
+    model::{AgentConfig, AgentStatus, ClaimedJob},
     printer::{self, SpoolOutcome},
 };
 
@@ -83,8 +83,7 @@ pub async fn run(app: AppHandle, runtime: AgentRuntime, api: ApiClient) {
                     job.id,
                     job.printer.queue_id
                 );
-                let outcome =
-                    process(&job.printer.queue_id, &job.id, &job.raw, &job.artifact_hash).await;
+                let outcome = process(&job).await;
                 let (state, error) = match outcome {
                     SpoolOutcome::Submitted => {
                         log::info!("Print job {} completed in the OS queue", job.id);
@@ -116,16 +115,44 @@ pub async fn run(app: AppHandle, runtime: AgentRuntime, api: ApiClient) {
     }
 }
 
-async fn process(queue: &str, job_id: &str, raw: &str, expected_hash: &str) -> SpoolOutcome {
-    let bytes = match STANDARD.decode(raw) {
+fn decode_artifact(encoded: &str, expected_hash: &str) -> Result<Vec<u8>, String> {
+    let bytes = match STANDARD.decode(encoded) {
         Ok(bytes) => bytes,
-        Err(_) => return SpoolOutcome::Failed("The print artifact is not valid base64".into()),
+        Err(_) => return Err("The print artifact is not valid base64".into()),
     };
     let actual = hex::encode(Sha256::digest(&bytes));
     if actual != expected_hash {
-        return SpoolOutcome::Failed("The print artifact hash did not match".into());
+        return Err("The print artifact hash did not match".into());
     }
-    printer::spool(queue, job_id, &bytes).await
+    Ok(bytes)
+}
+
+async fn process(job: &ClaimedJob) -> SpoolOutcome {
+    #[cfg(target_os = "macos")]
+    {
+        let (Some(pdf), Some(pdf_hash), Some(options)) =
+            (&job.pdf, &job.pdf_hash, &job.print_options)
+        else {
+            return SpoolOutcome::Failed(
+                "This print job requires HayahAI Client API with macOS PDF printing support".into(),
+            );
+        };
+        let bytes = match decode_artifact(pdf, pdf_hash) {
+            Ok(bytes) => bytes,
+            Err(error) => return SpoolOutcome::Failed(error),
+        };
+        return printer::spool(&job.printer.queue_id, &job.id, &bytes, Some(options)).await;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let bytes = match decode_artifact(&job.raw, &job.artifact_hash) {
+            Ok(bytes) => bytes,
+            Err(error) => return SpoolOutcome::Failed(error),
+        };
+        return printer::spool(&job.printer.queue_id, &job.id, &bytes, None).await;
+    }
+    #[allow(unreachable_code)]
+    SpoolOutcome::Failed("Unsupported operating system".into())
 }
 
 #[cfg(test)]
@@ -134,7 +161,9 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_changed_artifact_before_spooling() {
-        let result = process("unused", "job", "AQID", "wrong").await;
-        assert!(matches!(result, SpoolOutcome::Failed(_)));
+        assert_eq!(
+            decode_artifact("AQID", "wrong"),
+            Err("The print artifact hash did not match".into())
+        );
     }
 }

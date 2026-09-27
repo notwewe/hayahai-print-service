@@ -1,4 +1,7 @@
-use crate::{AgentError, model::PrinterInfo};
+use crate::{
+    AgentError,
+    model::{ClaimedPrintOptions, PrinterInfo},
+};
 
 #[derive(Debug)]
 pub enum SpoolOutcome {
@@ -21,11 +24,16 @@ pub async fn discover() -> Result<Vec<PrinterInfo>, AgentError> {
     Err(AgentError::UnsupportedPlatform)
 }
 
-pub async fn spool(queue: &str, job_id: &str, bytes: &[u8]) -> SpoolOutcome {
+pub async fn spool(
+    queue: &str,
+    job_id: &str,
+    bytes: &[u8],
+    options: Option<&ClaimedPrintOptions>,
+) -> SpoolOutcome {
     #[cfg(target_os = "macos")]
-    return macos::spool(queue, job_id, bytes).await;
+    return macos::spool(queue, job_id, bytes, options).await;
     #[cfg(target_os = "windows")]
-    return windows::spool(queue, job_id, bytes).await;
+    return windows::spool(queue, job_id, bytes, options).await;
     #[allow(unreachable_code)]
     SpoolOutcome::Failed("Unsupported operating system".into())
 }

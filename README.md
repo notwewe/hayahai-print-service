@@ -1,6 +1,6 @@
 # HayahAI Print Service
 
-HayahAI Print Service is the workstation agent for managed receipt printing in HayahAI TMS. It accepts signed jobs from one paired shipping-line Client API and writes exact ESC/POS bytes to an installed operating-system printer queue.
+HayahAI Print Service is the workstation agent for managed receipt printing in HayahAI TMS. It accepts signed jobs from one paired shipping-line Client API and submits them to an installed operating-system printer queue.
 
 It supports Windows x64 and macOS Intel/Apple Silicon with ESC/POS-compatible 58mm and 80mm printers. USB and network printers work after they are installed as normal OS queues.
 
@@ -9,7 +9,7 @@ It supports Windows x64 and macOS Intel/Apple Silicon with ESC/POS-compatible 58
 - The service has no inbound port and makes outbound HTTPS requests only.
 - Pairing creates an Ed25519 key on the workstation. The private key stays in Windows Credential Manager or macOS Keychain.
 - Requests include a timestamp and strictly increasing signed counter. The server rejects expired, replayed, changed, or revoked requests.
-- Raw receipt bytes are verified by SHA-256 and sent directly to Winspool or CUPS. Receipt content and raw bytes are excluded from logs.
+- Print artifacts are verified by SHA-256 before submission. Windows sends exact ESC/POS bytes through Winspool. macOS sends the matching PDF through the installed CUPS raster driver with the managed paper and cutter settings. Receipt content and print bytes are excluded from logs.
 - One claimed job is attempted once. A partial write or missing acknowledgement is reported as `unknown` and is never automatically retried.
 
 ## Install and pair
