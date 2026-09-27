@@ -139,11 +139,26 @@ async fn decode<T: DeserializeOwned>(response: reqwest::Response) -> Result<T, A
     let status = response.status();
     if !status.is_success() {
         let body = response.text().await.unwrap_or_default();
-        return Err(AgentError::Api(format!(
-            "Request failed ({status}): {body}"
-        )));
+        return Err(AgentError::Api(api_error_message(status, &body)));
     }
     Ok(response.json::<ApiEnvelope<T>>().await?.data)
+}
+
+fn api_error_message(status: reqwest::StatusCode, body: &str) -> String {
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return "This workstation pairing is no longer authorized. Generate a new pairing link in TMS, then select Pair a new link.".into();
+    }
+    let message = serde_json::from_str::<Value>(body)
+        .ok()
+        .and_then(|value| value.get("message")?.as_str().map(str::to_owned))
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| {
+            status
+                .canonical_reason()
+                .unwrap_or("Request failed")
+                .to_owned()
+        });
+    format!("Request failed ({status}): {message}")
 }
 
 pub fn validate_api_url(value: &str) -> Result<(), AgentError> {
@@ -163,4 +178,25 @@ pub fn validate_api_url(value: &str) -> Result<(), AgentError> {
         return Err(AgentError::InvalidPairing);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unauthorized_errors_request_a_new_pairing_without_exposing_server_details() {
+        let body = r#"{"message":"Invalid print-agent signature.","stack":"sensitive stack"}"#;
+        let message = api_error_message(reqwest::StatusCode::UNAUTHORIZED, body);
+        assert!(message.contains("Generate a new pairing link"));
+        assert!(!message.contains("sensitive stack"));
+    }
+
+    #[test]
+    fn other_api_errors_include_only_the_public_message() {
+        let body = r#"{"message":"Printer is unavailable.","stack":"sensitive stack"}"#;
+        let message = api_error_message(reqwest::StatusCode::BAD_REQUEST, body);
+        assert!(message.contains("Printer is unavailable."));
+        assert!(!message.contains("sensitive stack"));
+    }
 }

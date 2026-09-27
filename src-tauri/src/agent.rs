@@ -78,15 +78,30 @@ pub async fn run(app: AppHandle, runtime: AgentRuntime, api: ApiClient) {
             Ok(Some(job)) => {
                 runtime.active_job.store(true, Ordering::SeqCst);
                 runtime.status.write().await.active_job = true;
+                log::info!(
+                    "Claimed print job {} for queue {}",
+                    job.id,
+                    job.printer.queue_id
+                );
                 let outcome =
                     process(&job.printer.queue_id, &job.id, &job.raw, &job.artifact_hash).await;
                 let (state, error) = match outcome {
-                    SpoolOutcome::Submitted => ("submitted", None),
-                    SpoolOutcome::Failed(error) => ("failed", Some(error)),
-                    SpoolOutcome::Unknown(error) => ("unknown", Some(error)),
+                    SpoolOutcome::Submitted => {
+                        log::info!("Print job {} completed in the OS queue", job.id);
+                        ("submitted", None)
+                    }
+                    SpoolOutcome::Failed(error) => {
+                        log::warn!("Print job {} failed safely: {}", job.id, error);
+                        ("failed", Some(error))
+                    }
+                    SpoolOutcome::Unknown(error) => {
+                        log::warn!("Print job {} has an uncertain outcome: {}", job.id, error);
+                        ("unknown", Some(error))
+                    }
                 };
-                if let Err(error) = api.acknowledge(&job.id, state, error.as_deref()).await {
-                    runtime.set_error(error).await;
+                if let Err(ack_error) = api.acknowledge(&job.id, state, error.as_deref()).await {
+                    log::warn!("Could not acknowledge print job {}: {}", job.id, ack_error);
+                    runtime.set_error(ack_error).await;
                 }
                 runtime.active_job.store(false, Ordering::SeqCst);
                 runtime.status.write().await.active_job = false;

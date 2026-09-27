@@ -25,6 +25,8 @@ label { display: grid; gap: 7px; margin-top: 18px; font-size: 13px; font-weight:
 input { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; }
 button { margin-top: 12px; border: 0; border-radius: 8px; padding: 10px 15px; background: #246bfd; color: white; font: inherit; font-weight: 700; cursor: pointer; }
 button:disabled { opacity: .55; }
+.actions { display: flex; gap: 10px; align-items: center; }
+.secondary { color: #246bfd; background: #eaf1ff; }
 .error { margin-top: 14px; border-radius: 8px; padding: 10px; background: #fff0f0; color: #a32626; font-size: 13px; }
 .foot { margin-top: 20px; font-size: 12px; line-height: 1.45; }
 @media (prefers-color-scheme: dark) {
@@ -32,5 +34,6 @@ button:disabled { opacity: .55; }
   .card { background: #202634; border-color: #343d50; }
   p, dt { color: #aeb8cb; }
   input { color: #edf3ff; background: #171c27; border-color: #465167; }
+  .secondary { color: #a9c5ff; background: #293651; }
   li { border-color: #343d50; }
 }
