@@ -130,18 +130,56 @@ fn decode_artifact(encoded: &str, expected_hash: &str) -> Result<Vec<u8>, String
 async fn process(job: &ClaimedJob) -> SpoolOutcome {
     #[cfg(target_os = "macos")]
     {
-        let (Some(pdf), Some(pdf_hash), Some(options)) =
-            (&job.pdf, &job.pdf_hash, &job.print_options)
-        else {
+        let Some(options) = &job.print_options else {
             return SpoolOutcome::Failed(
                 "This print job requires HayahAI Client API with macOS PDF printing support".into(),
             );
+        };
+        if let Some(documents) = job.documents.as_ref().filter(|pages| !pages.is_empty()) {
+            let mut submitted_pages = 0usize;
+            for (index, document) in documents.iter().enumerate() {
+                let bytes = match decode_artifact(&document.pdf, &document.pdf_hash) {
+                    Ok(bytes) => bytes,
+                    Err(error) if submitted_pages == 0 => return SpoolOutcome::Failed(error),
+                    Err(error) => {
+                        return SpoolOutcome::Unknown(format!(
+                            "{submitted_pages} page(s) printed before page {} failed validation: {error}",
+                            index + 1
+                        ));
+                    }
+                };
+                let page_job_id = format!("{}-page-{}", job.id, index + 1);
+                match printer::spool(
+                    &job.printer.queue_id,
+                    &page_job_id,
+                    &bytes,
+                    Some(options),
+                    Some((document.width_mm, document.height_mm)),
+                )
+                .await
+                {
+                    SpoolOutcome::Submitted => submitted_pages += 1,
+                    SpoolOutcome::Failed(error) if submitted_pages == 0 => {
+                        return SpoolOutcome::Failed(error);
+                    }
+                    SpoolOutcome::Failed(error) | SpoolOutcome::Unknown(error) => {
+                        return SpoolOutcome::Unknown(format!(
+                            "{submitted_pages} page(s) printed before page {} had an uncertain result: {error}",
+                            index + 1
+                        ));
+                    }
+                }
+            }
+            return SpoolOutcome::Submitted;
+        }
+        let (Some(pdf), Some(pdf_hash)) = (&job.pdf, &job.pdf_hash) else {
+            return SpoolOutcome::Failed("The macOS PDF artifact is missing".into());
         };
         let bytes = match decode_artifact(pdf, pdf_hash) {
             Ok(bytes) => bytes,
             Err(error) => return SpoolOutcome::Failed(error),
         };
-        return printer::spool(&job.printer.queue_id, &job.id, &bytes, Some(options)).await;
+        return printer::spool(&job.printer.queue_id, &job.id, &bytes, Some(options), None).await;
     }
     #[cfg(target_os = "windows")]
     {
@@ -149,7 +187,7 @@ async fn process(job: &ClaimedJob) -> SpoolOutcome {
             Ok(bytes) => bytes,
             Err(error) => return SpoolOutcome::Failed(error),
         };
-        return printer::spool(&job.printer.queue_id, &job.id, &bytes, None).await;
+        return printer::spool(&job.printer.queue_id, &job.id, &bytes, None, None).await;
     }
     #[allow(unreachable_code)]
     SpoolOutcome::Failed("Unsupported operating system".into())

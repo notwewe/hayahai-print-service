@@ -65,6 +65,15 @@ pub struct ClaimedPrintOptions {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ClaimedDocument {
+    pub pdf: String,
+    pub pdf_hash: String,
+    pub width_mm: f64,
+    pub height_mm: f64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 #[allow(dead_code)] // The signed cross-platform protocol carries both Windows raw and macOS PDF artifacts.
 pub struct ClaimedJob {
     pub id: String,
@@ -72,6 +81,8 @@ pub struct ClaimedJob {
     pub artifact_hash: String,
     pub pdf: Option<String>,
     pub pdf_hash: Option<String>,
+    #[serde(default)]
+    pub documents: Option<Vec<ClaimedDocument>>,
     pub print_options: Option<ClaimedPrintOptions>,
     pub printer: ClaimedPrinter,
 }

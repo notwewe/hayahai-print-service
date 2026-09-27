@@ -52,11 +52,36 @@ pub async fn discover() -> Result<Vec<PrinterInfo>, AgentError> {
     Ok(printers)
 }
 
-fn driver_options(options: &ClaimedPrintOptions) -> Result<Vec<String>, String> {
-    let page_size = match options.paper_width_mm {
-        58 => "RP58x2000",
-        80 => "RP80x2000",
-        width => return Err(format!("Unsupported receipt paper width: {width}mm")),
+fn millimeters(value: f64) -> String {
+    let value = format!("{value:.2}");
+    value.trim_end_matches('0').trim_end_matches('.').to_owned()
+}
+
+fn driver_options(
+    options: &ClaimedPrintOptions,
+    page_size_mm: Option<(f64, f64)>,
+) -> Result<Vec<String>, String> {
+    if !matches!(options.paper_width_mm, 58 | 80) {
+        return Err(format!(
+            "Unsupported receipt paper width: {}mm",
+            options.paper_width_mm
+        ));
+    }
+    let page_size = if let Some((width, height)) = page_size_mm {
+        if !(width.is_finite()
+            && height.is_finite()
+            && (25.4..=80.0).contains(&width)
+            && (25.4..=2000.0).contains(&height))
+        {
+            return Err("The rendered receipt page size is invalid".into());
+        }
+        format!("Custom.{}x{}mm", millimeters(width), millimeters(height))
+    } else {
+        match options.paper_width_mm {
+            58 => "RP58x2000".into(),
+            80 => "RP80x2000".into(),
+            _ => unreachable!(),
+        }
     };
     let cut = match options.cut.as_str() {
         "none" => "TmxPaperCut=NoCut",
@@ -68,7 +93,6 @@ fn driver_options(options: &ClaimedPrintOptions) -> Result<Vec<String>, String> 
         format!("PageSize={page_size}"),
         format!("Resolution={}x{}dpi", options.dpi, options.dpi),
         "sides=one-sided".into(),
-        "fit-to-page".into(),
         "TmxPaperReduction=Bottom".into(),
         cut.into(),
     ])
@@ -79,11 +103,12 @@ pub async fn spool(
     job_id: &str,
     bytes: &[u8],
     options: Option<&ClaimedPrintOptions>,
+    page_size_mm: Option<(f64, f64)>,
 ) -> SpoolOutcome {
     let Some(options) = options else {
         return SpoolOutcome::Failed("The macOS printer settings are missing".into());
     };
-    let options = match driver_options(options) {
+    let options = match driver_options(options, page_size_mm) {
         Ok(options) => options,
         Err(error) => return SpoolOutcome::Failed(error),
     };
@@ -327,36 +352,51 @@ mod tests {
     #[test]
     fn maps_managed_preset_to_epson_driver_options() {
         assert_eq!(
-            driver_options(&ClaimedPrintOptions {
-                paper_width_mm: 80,
-                dpi: 203,
-                cut: "partial".into(),
-            }),
+            driver_options(
+                &ClaimedPrintOptions {
+                    paper_width_mm: 80,
+                    dpi: 203,
+                    cut: "partial".into(),
+                },
+                Some((72.0, 145.0)),
+            ),
             Ok(vec![
-                "media=RP80x2000".into(),
-                "PageSize=RP80x2000".into(),
+                "media=Custom.72x145mm".into(),
+                "PageSize=Custom.72x145mm".into(),
                 "Resolution=203x203dpi".into(),
                 "sides=one-sided".into(),
-                "fit-to-page".into(),
                 "TmxPaperReduction=Bottom".into(),
                 "TmxPaperCut=CutPerPage".into(),
             ])
         );
         assert_eq!(
-            driver_options(&ClaimedPrintOptions {
-                paper_width_mm: 58,
-                dpi: 300,
-                cut: "none".into(),
-            }),
+            driver_options(
+                &ClaimedPrintOptions {
+                    paper_width_mm: 58,
+                    dpi: 300,
+                    cut: "none".into(),
+                },
+                Some((48.01, 201.25)),
+            ),
             Ok(vec![
-                "media=RP58x2000".into(),
-                "PageSize=RP58x2000".into(),
+                "media=Custom.48.01x201.25mm".into(),
+                "PageSize=Custom.48.01x201.25mm".into(),
                 "Resolution=300x300dpi".into(),
                 "sides=one-sided".into(),
-                "fit-to-page".into(),
                 "TmxPaperReduction=Bottom".into(),
                 "TmxPaperCut=NoCut".into(),
             ])
         );
+    }
+
+    #[test]
+    fn rejects_invalid_custom_roll_dimensions() {
+        let options = ClaimedPrintOptions {
+            paper_width_mm: 80,
+            dpi: 203,
+            cut: "partial".into(),
+        };
+        assert!(driver_options(&options, Some((72.0, 2000.1))).is_err());
+        assert!(driver_options(&options, Some((f64::NAN, 145.0))).is_err());
     }
 }

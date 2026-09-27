@@ -29,11 +29,12 @@ pub async fn spool(
     job_id: &str,
     bytes: &[u8],
     options: Option<&ClaimedPrintOptions>,
+    page_size_mm: Option<(f64, f64)>,
 ) -> SpoolOutcome {
     #[cfg(target_os = "macos")]
-    return macos::spool(queue, job_id, bytes, options).await;
+    return macos::spool(queue, job_id, bytes, options, page_size_mm).await;
     #[cfg(target_os = "windows")]
-    return windows::spool(queue, job_id, bytes, options).await;
+    return windows::spool(queue, job_id, bytes, options, page_size_mm).await;
     #[allow(unreachable_code)]
     SpoolOutcome::Failed("Unsupported operating system".into())
 }

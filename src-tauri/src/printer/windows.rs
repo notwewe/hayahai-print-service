@@ -103,6 +103,7 @@ pub async fn spool(
     job_id: &str,
     bytes: &[u8],
     _options: Option<&ClaimedPrintOptions>,
+    _page_size_mm: Option<(f64, f64)>,
 ) -> SpoolOutcome {
     let queue = queue.to_owned();
     let job_id = job_id.to_owned();
